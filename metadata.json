@@ -1,0 +1,6 @@
+{
+  "name": "Kantor AI 3D",
+  "description": "Pusat Manajemen Sosial Media Otomatis dengan Kantor 3D Interaktif",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

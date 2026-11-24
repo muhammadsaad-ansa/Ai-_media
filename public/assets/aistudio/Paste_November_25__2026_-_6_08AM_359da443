@@ -1,0 +1,1544 @@
+```html
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kantor AI 3D — Pusat Manajemen Sosial Media Otomatis</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; font-family: 'Inter', sans-serif; }
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #090d16; color: #f8fafc; user-select: none; }
+    #canvas-container { position: fixed; inset: 0; z-index: 1; cursor: grab; }
+    #canvas-container:active { cursor: grabbing; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    
+    /* Glassmorphism panels */
+    .glass {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+    }
+
+    /* Floating 3D Labels & Speech Bubbles */
+    #labels-layer { position: fixed; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
+    .emp-tag {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      transition: opacity 0.2s;
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .speech-bubble {
+      animation: floatBubble 2.6s ease-in-out infinite;
+    }
+    @keyframes floatBubble {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-4px); }
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.4); }
+    ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.5); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.8); }
+
+    /* Toast Notification */
+    #toast-container { position: fixed; bottom: 84px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+  <!-- 3D Canvas Container -->
+  <div id="canvas-container"></div>
+
+  <!-- Floating 3D Nameplates & Speech Bubbles -->
+  <div id="labels-layer"></div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- TOP HUD BAR -->
+  <header class="fixed top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- Brand & Office Status -->
+    <div class="glass rounded-2xl px-4 py-2.5 flex items-center gap-3 pointer-events-auto">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-lg shadow-lg shadow-indigo-500/30">
+        🏢
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm sm:text-base font-bold tracking-tight text-white">Kantor AI Studio 3D</h1>
+          <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> 7 AI Aktif
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 hidden sm:block">Klik karyawan 3D untuk atur Otak AI & Skill PDF</p>
+      </div>
+    </div>
+
+    <!-- Real-time Clock & Shortcut Actions -->
+    <div class="flex flex-wrap items-center gap-2 pointer-events-auto">
+      <!-- Real-Time Clock -->
+      <div class="glass rounded-2xl px-3.5 py-2 flex items-center gap-2.5">
+        <span class="text-base">🕒</span>
+        <div>
+          <div id="realtime-clock" class="mono text-xs sm:text-sm font-bold text-indigo-300 leading-none">00:00:00 WIB</div>
+          <div id="realtime-date" class="text-[10px] text-slate-400 mt-0.5">Memuat tanggal...</div>
+        </div>
+      </div>
+
+      <!-- Shortcut: Dashboard Pemantauan Pekerjaan -->
+      <button onclick="openModal('dashboard-modal')" class="glass hover:bg-indigo-600/30 border-indigo-500/40 rounded-2xl px-3.5 py-2.5 flex items-center gap-2 transition text-xs sm:text-sm font-semibold text-white shadow-lg">
+        <span>📊</span>
+        <span>Dashboard Kerja</span>
+        <span id="hud-upload-badge" class="px-1.5 py-0.5 text-[10px] rounded-md bg-indigo-500 text-white font-bold">0/5 Reel</span>
+      </button>
+
+      <!-- Shortcut: Hubungkan Sosial Media -->
+      <button onclick="openModal('social-modal')" class="glass hover:bg-pink-600/30 border-pink-500/40 rounded-2xl px-3.5 py-2.5 flex items-center gap-2 transition text-xs sm:text-sm font-semibold text-white shadow-lg">
+        <span>🔗</span>
+        <span class="hidden md:inline">Akun Sosmed</span>
+        <span id="hud-social-count" class="px-1.5 py-0.5 text-[10px] rounded-md bg-pink-500/80 text-white font-bold">2 Aktif</span>
+      </button>
+
+      <!-- Trigger Pipeline Cycle -->
+      <button onclick="triggerUploadCycle(true)" class="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 rounded-2xl px-3.5 py-2.5 flex items-center gap-1.5 transition text-xs sm:text-sm font-bold text-white shadow-lg shadow-emerald-600/25">
+        <span>🚀</span>
+        <span class="hidden sm:inline">Upload Reel</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ROOM CAMERA TELEPORT PILLS (Left/Top-Left Floating) -->
+  <div class="fixed left-3 top-20 z-20 flex flex-col gap-1.5 pointer-events-auto">
+    <div class="glass rounded-2xl p-1.5 flex flex-col gap-1">
+      <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 pt-1">Area Kantor</span>
+      <button onclick="focusCameraZone('overview')" class="text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-white/10 transition flex items-center gap-2">🗺️ <span>Semua Ruang</span></button>
+      <button onclick="focusCameraZone('workstations')" class="text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-white/10 transition flex items-center gap-2">💻 <span>Meja Kerja (7)</span></button>
+      <button onclick="focusCameraZone('meeting')" class="text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-white/10 transition flex items-center gap-2">📋 <span>Ruang Rapat</span></button>
+      <button onclick="focusCameraZone('coffee')" class="text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-white/10 transition flex items-center gap-2">☕ <span>Ruang Ngopi</span></button>
+      <button onclick="focusCameraZone('bedroom')" class="text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-white/10 transition flex items-center gap-2">🛏️ <span>Ruang Tidur</span></button>
+      <button onclick="focusCameraZone('garden')" class="text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-white/10 transition flex items-center gap-2">🌳 <span>Taman Kantor</span></button>
+    </div>
+
+    <!-- Autonomous Mode Toggle -->
+    <div class="glass rounded-2xl p-2.5 flex flex-col gap-1.5 max-w-[165px]">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-semibold text-slate-200">Mode Otomatis</span>
+        <button id="auto-mode-btn" onclick="toggleAutoMode()" class="w-10 h-5 rounded-full bg-emerald-500 relative transition p-0.5">
+          <span id="auto-mode-dot" class="block w-4 h-4 rounded-full bg-white transition-transform translate-x-5"></span>
+        </button>
+      </div>
+      <p class="text-[10px] text-slate-400 leading-tight">Karyawan AI otomatis kerja, rapat, ngopi & istirahat.</p>
+    </div>
+  </div>
+
+  <!-- BOTTOM EMPLOYEE DOCK (7 AI Employees) -->
+  <div class="fixed bottom-3 left-3 right-3 z-20 flex justify-center pointer-events-none">
+    <div id="employee-dock" class="glass rounded-2xl p-2 flex items-center gap-2 overflow-x-auto max-w-full pointer-events-auto">
+      <!-- Populated dynamically via JS -->
+    </div>
+  </div>
+
+  <!-- RIGHT DRAWER: AI BRAIN, ACTIVITY & PDF SKILL CONFIG PER EMPLOYEE -->
+  <aside id="employee-drawer" class="fixed top-20 right-3 bottom-20 w-[92vw] sm:w-[400px] glass rounded-3xl z-30 transform translate-x-[120%] transition-transform duration-300 flex flex-col overflow-hidden">
+    <!-- Drawer Header -->
+    <div class="p-4 border-b border-slate-700/60 flex items-center justify-between bg-slate-900/50">
+      <div class="flex items-center gap-3">
+        <div id="drawer-avatar" class="w-11 h-11 rounded-2xl flex items-center justify-center text-xl font-bold shadow-inner">🤖</div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 id="drawer-name" class="text-base font-bold text-white">Nama Karyawan</h2>
+            <span id="drawer-badge" class="px-2 py-0.5 text-[10px] rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold">Role</span>
+          </div>
+          <p id="drawer-status-text" class="text-xs text-emerald-400 mt-0.5">Sedang bekerja...</p>
+        </div>
+      </div>
+      <button onclick="closeEmployeeDrawer()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300">✕</button>
+    </div>
+
+    <!-- Drawer Content (Scrollable) -->
+    <div class="p-4 overflow-y-auto flex-1 space-y-4">
+      <!-- 1. Pengaturan Aktivitas Karyawan -->
+      <div class="glass-card rounded-2xl p-3.5 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+            <span>🎮</span> Pengaturan Aktivitas & Lokasi
+          </label>
+          <span class="text-[10px] text-slate-400">Real-time 3D</span>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5" id="activity-buttons">
+          <button onclick="setEmployeeActivity('work')" data-act="work" class="act-btn px-2.5 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-indigo-600/40 border border-slate-700 text-left flex items-center gap-1.5">💻 Bekerja di Meja</button>
+          <button onclick="setEmployeeActivity('meeting')" data-act="meeting" class="act-btn px-2.5 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-indigo-600/40 border border-slate-700 text-left flex items-center gap-1.5">📋 Ruang Rapat</button>
+          <button onclick="setEmployeeActivity('coffee')" data-act="coffee" class="act-btn px-2.5 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-indigo-600/40 border border-slate-700 text-left flex items-center gap-1.5">☕ Ruang Ngopi</button>
+          <button onclick="setEmployeeActivity('sleep')" data-act="sleep" class="act-btn px-2.5 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-indigo-600/40 border border-slate-700 text-left flex items-center gap-1.5">🛏️ Tidur / Istirahat</button>
+          <button onclick="setEmployeeActivity('garden')" data-act="garden" class="act-btn col-span-2 px-2.5 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-indigo-600/40 border border-slate-700 text-left flex items-center gap-1.5">🌳 Jalan & Cari Ide di Taman</button>
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Kata-kata / Emot Status Kustom:</label>
+          <div class="flex gap-1.5">
+            <input id="custom-bubble-input" type="text" placeholder="Contoh: 🔥 Lagi render video viral!" class="flex-1 bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500" />
+            <button onclick="applyCustomBubble()" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold">Set</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Otak Karyawan AI (System Prompt & Behavior) -->
+      <div class="glass-card rounded-2xl p-3.5 space-y-2.5">
+        <label class="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+          <span>🧠</span> Otak Karyawan AI (Instruksi Inti)
+        </label>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Gaya Bahasa & Kepribadian AI</label>
+          <select id="brain-tone" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            <option value="Profesional, Cepat & Berorientasi Viral">Profesional, Cepat & Berorientasi Viral</option>
+            <option value="Santai, Gen-Z & Penuh Hook Menarik">Santai, Gen-Z & Penuh Hook Menarik</option>
+            <option value="Ramah, Empatik & Persuasif (Soft Selling)">Ramah, Empatik & Persuasif (Soft Selling)</option>
+            <option value="Analitis, Berbasis Data & Tren Terkini">Analitis, Berbasis Data & Tren Terkini</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[11px] text-slate-400 block mb-1">Prompt Otak AI (Dapat Anda Ubah Sendiri)</label>
+          <textarea id="brain-prompt" rows="4" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 leading-relaxed focus:outline-none focus:border-purple-500"></textarea>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex-1">
+            <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+              <span>Kreativitas AI</span>
+              <span id="brain-temp-val" class="text-purple-300 font-bold">0.8</span>
+            </div>
+            <input id="brain-temp" type="range" min="0.1" max="1.0" step="0.1" value="0.8" oninput="document.getElementById('brain-temp-val').textContent=this.value" class="w-full accent-purple-500" />
+          </div>
+          <button onclick="saveEmployeeBrain()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-bold text-white shadow">
+            💾 Simpan Otak
+          </button>
+        </div>
+      </div>
+
+      <!-- 3. Tambah Skill Karyawan AI via PDF -->
+      <div class="glass-card rounded-2xl p-3.5 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+            <span>📄</span> Skill Karyawan AI (Upload PDF)
+          </label>
+          <span id="pdf-count-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">0 PDF</span>
+        </div>
+        <p class="text-[11px] text-slate-400">Unggah SOP, panduan editing, katalog produk, atau materi riset (.pdf) agar dipelajari langsung oleh karyawan AI ini.</p>
+        
+        <label class="flex flex-col items-center justify-center border-2 border-dashed border-slate-600 hover:border-emerald-400 rounded-2xl p-3 cursor-pointer bg-slate-900/40 transition">
+          <span class="text-xl mb-1">📥</span>
+          <span class="text-xs font-semibold text-slate-200">Pilih File PDF Skill Baru</span>
+          <span class="text-[10px] text-slate-400">Klik untuk unggah dokumen .PDF</span>
+          <input id="pdf-skill-input" type="file" accept=".pdf,application/pdf" class="hidden" onchange="handlePdfUpload(event)" />
+        </label>
+
+        <!-- Uploaded PDF List -->
+        <div id="pdf-skill-list" class="space-y-1.5">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MODAL: PINTASAN DASHBOARD PEMANTAUAN PEKERJAAN -->
+  <div id="dashboard-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-6">
+    <div class="glass rounded-3xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden border border-indigo-500/30">
+      <div class="p-4 sm:p-5 border-b border-slate-700/70 flex items-center justify-between bg-slate-900/70">
+        <div class="flex items-center gap-3">
+          <span class="text-2xl">📊</span>
+          <div>
+            <h2 class="text-base sm:text-lg font-bold text-white">Dashboard Pemantauan Pekerjaan Tim AI</h2>
+            <p class="text-xs text-slate-400">Target Harian: <strong class="text-emerald-400">5 Upload Reel / Hari</strong> di setiap akun sosial media terhubung</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="triggerUploadCycle(true)" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white">⚡ Proses 1 Siklus Konten</button>
+          <button onclick="closeModal('dashboard-modal')" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300">✕</button>
+        </div>
+      </div>
+
+      <div class="p-4 sm:p-5 overflow-y-auto space-y-5">
+        <!-- Top KPI Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="glass-card rounded-2xl p-3.5">
+            <div class="text-xs text-slate-400">Target Reel Hari Ini</div>
+            <div id="kpi-reels" class="text-2xl font-extrabold text-indigo-400 mt-1">6 / 10</div>
+            <div class="text-[11px] text-emerald-400 mt-0.5">5 Reel / Akun Terhubung</div>
+          </div>
+          <div class="glass-card rounded-2xl p-3.5">
+            <div class="text-xs text-slate-400">Animasi 30 Detik (Ilyas)</div>
+            <div id="kpi-anim" class="text-2xl font-extrabold text-purple-400 mt-1">8 Video</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">Siap diedit Ilham</div>
+          </div>
+          <div class="glass-card rounded-2xl p-3.5">
+            <div class="text-xs text-slate-400">Pesan Customer (Zubair)</div>
+            <div id="kpi-dm" class="text-2xl font-extrabold text-amber-400 mt-1">142 Dibalas</div>
+            <div class="text-[11px] text-emerald-400 mt-0.5">Respon rata-rata 4 dtk</div>
+          </div>
+          <div class="glass-card rounded-2xl p-3.5">
+            <div class="text-xs text-slate-400">Skor Tren Viral (Hamza)</div>
+            <div class="text-2xl font-extrabold text-pink-400 mt-1">94.8%</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">12 Audio & Hook ditemukan</div>
+          </div>
+        </div>
+
+        <!-- Daily 5 Reels Progress per Connected Social Media -->
+        <div class="glass-card rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2"><span>🎯</span> Progres Upload Harian (Target: 5 Reel / Media)</h3>
+            <button onclick="closeModal('dashboard-modal'); openModal('social-modal');" class="text-xs text-pink-400 hover:underline font-semibold">+ Kelola Akun Sosmed</button>
+          </div>
+          <div id="dashboard-social-progress" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- 7 Employees Live Status Table & Live Log -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div class="lg:col-span-2 glass-card rounded-2xl p-4">
+            <h3 class="text-sm font-bold text-white mb-3">👥 Status & Performa 7 Karyawan AI</h3>
+            <div id="dashboard-employee-list" class="space-y-2">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <div class="glass-card rounded-2xl p-4 flex flex-col">
+            <h3 class="text-sm font-bold text-white mb-3">📜 Log Aktivitas Otomatis</h3>
+            <div id="activity-log-feed" class="space-y-2 overflow-y-auto max-h-[300px] text-xs pr-1">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: HUBUNGKAN AKUN SOSIAL MEDIA -->
+  <div id="social-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-6">
+    <div class="glass rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-pink-500/30">
+      <div class="p-4 sm:p-5 border-b border-slate-700/70 flex items-center justify-between bg-slate-900/70">
+        <div class="flex items-center gap-3">
+          <span class="text-2xl">🔗</span>
+          <div>
+            <h2 class="text-base sm:text-lg font-bold text-white">Hubungkan Akun Sosial Media</h2>
+            <p class="text-xs text-slate-400">Abbas (Pengupload AI) akan otomatis mengunggah <strong class="text-pink-400">5 Reel per hari</strong> ke tiap akun aktif.</p>
+          </div>
+        </div>
+        <button onclick="closeModal('social-modal')" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300">✕</button>
+      </div>
+
+      <div id="social-accounts-list" class="p-4 sm:p-5 overflow-y-auto space-y-3">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. DATA STATE: 7 KARYAWAN AI & SOSIAL MEDIA
+    // ==========================================
+    const EMPLOYEES = [
+      {
+        id: 'ilham',
+        name: 'Ilham',
+        role: 'Editor Video & Visual',
+        shortRole: 'Editor',
+        emoji: '🎬',
+        color: '#6366f1',
+        hex: 0x6366f1,
+        deskIndex: 0,
+        activity: 'work',
+        statusText: '🎬 Lagi ngedit transisi Reel #3...',
+        customBubble: '',
+        tone: 'Profesional, Cepat & Berorientasi Viral',
+        temp: 0.7,
+        prompt: 'Kamu adalah Ilham, Editor Video senior. Tugasmu menggabungkan animasi 30 detik dari Ilyas dengan teks hook, subtitle dinamis, color grading tajam, dan musik trending agar siap diupload Abbas.',
+        pdfs: [
+          { name: 'SOP_Editing_Reels_Viral_2026.pdf', size: '1.4 MB', summary: 'Aturan cut tiap 2.5 detik, font tebal kuning-putih, rasio 9:16.' }
+        ],
+        tasksCompleted: 14
+      },
+      {
+        id: 'saad',
+        name: 'Saad',
+        role: 'HRD & Koordinator Tim AI',
+        shortRole: 'HRD',
+        emoji: '👔',
+        color: '#0ea5e9',
+        hex: 0x0ea5e9,
+        deskIndex: 1,
+        activity: 'meeting',
+        statusText: '📋 Evaluasi KPI & jadwal shift AI',
+        customBubble: '',
+        tone: 'Analitis, Berbasis Data & Tren Terkini',
+        temp: 0.5,
+        prompt: 'Kamu adalah Saad, HRD dan Manajer Operasional Kantor AI. Kamu memastikan seluruh 7 karyawan AI bekerja sinkron, mengatur waktu istirahat, dan menjaga target 5 upload Reel per hari terpenuhi.',
+        pdfs: [
+          { name: 'KPI_Standar_Kantor_AI.pdf', size: '890 KB', summary: 'Target 5 konten/hari/platform, respon DM < 10 detik.' }
+        ],
+        tasksCompleted: 9
+      },
+      {
+        id: 'ilyas',
+        name: 'Ilyas',
+        role: 'Pembuat Animasi 30 Detik',
+        shortRole: 'Animator 30s',
+        emoji: '✨',
+        color: '#a855f7',
+        hex: 0xa855f7,
+        deskIndex: 2,
+        activity: 'work',
+        statusText: '✨ Render animasi 30 detik (60fps)...',
+        customBubble: '',
+        tone: 'Santai, Gen-Z & Penuh Hook Menarik',
+        temp: 0.9,
+        prompt: 'Kamu adalah Ilyas, spesialis Motion Graphic & Animasi 30 Detik. Kamu mengubah naskah dari Abd Aziz menjadi visual animasi 30 detik yang memanjakan mata di 3 detik pertama.',
+        pdfs: [
+          { name: 'Preset_Motion_30Detik.pdf', size: '2.1 MB', summary: 'Keyframe bounce, transisi zoom cepat, aset karakter 3D.' }
+        ],
+        tasksCompleted: 11
+      },
+      {
+        id: 'hamza',
+        name: 'Hamza',
+        role: 'Riset Tayangan Sosial Media',
+        shortRole: 'Riset Tren',
+        emoji: '📈',
+        color: '#ec4899',
+        hex: 0xec4899,
+        deskIndex: 3,
+        activity: 'work',
+        statusText: '📊 Analisis algoritma & audio viral...',
+        customBubble: '',
+        tone: 'Analitis, Berbasis Data & Tren Terkini',
+        temp: 0.6,
+        prompt: 'Kamu adalah Hamza, Spesialis Riset Tayangan Sosial Media. Kamu memantau FYP TikTok, IG Reels, dan YouTube Shorts untuk menemukan topik dengan retensi tinggi dan jam posting terbaik.',
+        pdfs: [
+          { name: 'Laporan_Algoritma_Sosmed.pdf', size: '1.7 MB', summary: 'Jam prime time: 11:30, 15:00, 18:30, 20:00, 21:30 WIB.' }
+        ],
+        tasksCompleted: 19
+      },
+      {
+        id: 'abdaziz',
+        name: 'Abd Aziz',
+        role: 'Pembuat Materi Konten',
+        shortRole: 'Konten Kreator',
+        emoji: '✍️',
+        color: '#f59e0b',
+        hex: 0xf59e0b,
+        deskIndex: 4,
+        activity: 'coffee',
+        statusText: '☕ Ngopi sambil nulis hook viral!',
+        customBubble: '',
+        tone: 'Santai, Gen-Z & Penuh Hook Menarik',
+        temp: 0.85,
+        prompt: 'Kamu adalah Abd Aziz, Pembuat Materi & Copywriter Konten. Berdasarkan hasil riset Hamza, kamu menulis skrip video 30 detik yang kuat, edukatif, dan memicu komentar serta share.',
+        pdfs: [
+          { name: '100_Formula_Hook_Viral.pdf', size: '1.1 MB', summary: 'Pola AIDA, storytelling singkat, dan Call-to-Action halus.' }
+        ],
+        tasksCompleted: 16
+      },
+      {
+        id: 'abbas',
+        name: 'Abbas',
+        role: 'Pengupload di Media Sosial',
+        shortRole: 'Uploader Sosmed',
+        emoji: '🚀',
+        color: '#10b981',
+        hex: 0x10b981,
+        deskIndex: 5,
+        activity: 'work',
+        statusText: '🚀 Menjadwalkan 5 Reel/hari ke akun!',
+        customBubble: '',
+        tone: 'Profesional, Cepat & Berorientasi Viral',
+        temp: 0.4,
+        prompt: 'Kamu adalah Abbas, Spesialis Distribusi & Upload Sosial Media. Kamu memastikan tepat 5 video Reel terupload setiap hari pada setiap akun sosial media yang terhubung dengan caption SEO & hashtag optimal.',
+        pdfs: [
+          { name: 'Jadwal_5_Upload_Harian.pdf', size: '640 KB', summary: 'Distribusi otomatis ke IG Reels, TikTok, Shorts & FB Reels.' }
+        ],
+        tasksCompleted: 15
+      },
+      {
+        id: 'zubair',
+        name: 'Zubair',
+        role: 'Pembalas Pesan Customer',
+        shortRole: 'CS & DM',
+        emoji: '💬',
+        color: '#14b8a6',
+        hex: 0x14b8a6,
+        deskIndex: 6,
+        activity: 'work',
+        statusText: '💬 Balas DM & komentar calon pembeli!',
+        customBubble: '',
+        tone: 'Ramah, Empatik & Persuasif (Soft Selling)',
+        temp: 0.6,
+        prompt: 'Kamu adalah Zubair, Customer Service AI. Kamu membalas semua DM, komentar Reels, dan pertanyaan pelanggan dengan ramah, cepat, solutif, serta mengarahkan ke closing penjualan.',
+        pdfs: [
+          { name: 'FAQ_Produk_dan_Promo.pdf', size: '1.9 MB', summary: 'Daftar harga, cara pemesanan, garansi, dan promo bundling.' }
+        ],
+        tasksCompleted: 142
+      }
+    ];
+
+    const SOCIAL_ACCOUNTS = [
+      { id: 'instagram', name: 'Instagram Reels', icon: '📸', handle: '@kantor.ai.official', connected: true, uploadedToday: 3, dailyTarget: 5, color: 'from-pink-500 to-amber-500' },
+      { id: 'tiktok', name: 'TikTok', icon: '🎵', handle: '@kantorai_id', connected: true, uploadedToday: 3, dailyTarget: 5, color: 'from-cyan-400 to-rose-500' },
+      { id: 'youtube', name: 'YouTube Shorts', icon: '▶️', handle: 'Kantor AI Indonesia', connected: false, uploadedToday: 0, dailyTarget: 5, color: 'from-red-600 to-red-500' },
+      { id: 'facebook', name: 'Facebook Reels', icon: '📘', handle: 'Kantor AI Studio', connected: false, uploadedToday: 0, dailyTarget: 5, color: 'from-blue-600 to-indigo-500' }
+    ];
+
+    const ACTIVITY_LOGS = [
+      { time: 'Baru saja', actor: 'Abbas', text: 'Mengupload Reel #3 ke Instagram & TikTok (Target 5/hari).' },
+      { time: '2 mnt lalu', actor: 'Ilham', text: 'Selesai editing final video animasi 30 detik #4.' },
+      { time: '5 mnt lalu', actor: 'Ilyas', text: 'Render animasi 30 detik selesai untuk topik "AI Bisnis".' },
+      { time: '8 mnt lalu', actor: 'Abd Aziz', text: 'Menulis 5 skrip konten harian dari riset Hamza.' },
+      { time: '11 mnt lalu', actor: 'Zubair', text: 'Membalas 18 DM Instagram & 24 komentar TikTok.' },
+      { time: '15 mnt lalu', actor: 'Hamza', text: 'Menemukan audio trending baru (+340% kenaikan tayangan).' }
+    ];
+
+    let selectedEmployeeId = 'ilham';
+    let autoMode = true;
+    let dmCounter = 142;
+    let animCounter = 8;
+
+    // ==========================================
+    // 2. THREE.JS 3D OFFICE SCENE SETUP
+    // ==========================================
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b1120);
+    scene.fog = new THREE.FogExp2(0x0b1120, 0.014);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 24, 28);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xcbd5e1, 0.65);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+    dirLight.position.set(18, 32, 20);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.near = 2;
+    dirLight.shadow.camera.far = 85;
+    const d = 26;
+    dirLight.shadow.camera.left = -d;
+    dirLight.shadow.camera.right = d;
+    dirLight.shadow.camera.top = d;
+    dirLight.shadow.camera.bottom = -d;
+    scene.add(dirLight);
+
+    // Warm indoor accent lights
+    const coffeeLight = new THREE.PointLight(0xf59e0b, 0.9, 14);
+    coffeeLight.position.set(12, 4, -8);
+    scene.add(coffeeLight);
+
+    const workLight = new THREE.PointLight(0x6366f1, 0.8, 22);
+    workLight.position.set(-6, 5, 2);
+    scene.add(workLight);
+
+    // Helper Material & Mesh Functions
+    function createBox(w, h, d, color, x, y, z, castShadow = true, receiveShadow = true) {
+      const geo = new THREE.BoxGeometry(w, h, d);
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.1 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = castShadow;
+      mesh.receiveShadow = receiveShadow;
+      scene.add(mesh);
+      return mesh;
+    }
+
+    // ==========================================
+    // 3. BUILD 3D OFFICE ARCHITECTURE & ZONES
+    // ==========================================
+    // Main Office Base Floor (Indoor: x from -18 to 10, z from -14 to 14)
+    createBox(28, 0.4, 28, 0x1e293b, -4, -0.2, 0, false, true);
+    // Subtle Floor Grid Lines
+    const gridHelper = new THREE.GridHelper(28, 28, 0x334155, 0x263244);
+    gridHelper.position.set(-4, 0.01, 0);
+    scene.add(gridHelper);
+
+    // Garden Area Floor (Outdoor Right Side: x from 10 to 22, z from -14 to 14)
+    createBox(12, 0.4, 28, 0x15803d, 16, -0.2, 0, false, true);
+    // Garden Stone Pathway
+    createBox(2.2, 0.44, 20, 0x94a3b8, 13.5, -0.18, 0, false, true);
+
+    // Outer & Partition Walls (Low modern glass/concrete architectural walls so interior stays clearly visible)
+    const wallColor = 0x334155;
+    createBox(28, 2.4, 0.3, wallColor, -4, 1.2, -14); // North wall
+    createBox(0.3, 2.4, 28, wallColor, -18, 1.2, 0);  // West wall
+    createBox(28, 1.0, 0.3, wallColor, -4, 0.5, 14);  // South low wall
+    // Glass partition between Office and Garden
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.22, roughness: 0.1 });
+    const glassWall1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.4, 10), glassMat);
+    glassWall1.position.set(10, 1.2, -9);
+    scene.add(glassWall1);
+    const glassWall2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.4, 10), glassMat);
+    glassWall2.position.set(10, 1.2, 9);
+    scene.add(glassWall2);
+
+    // Interior Room Dividers
+    createBox(0.25, 2.0, 10, wallColor, -3, 1.0, -9);   // Divider between Meeting Room & Coffee Lounge
+    createBox(12, 2.0, 0.25, wallColor, 4, 1.0, -4);    // Divider below Coffee Lounge
+    createBox(11, 2.0, 0.25, wallColor, -12.5, 1.0, 6); // Divider above Rest/Bedroom area
+
+    // --- ZONE A: 7 WORKSTATIONS (Meja Kerja + Komputer + Dual Monitor) ---
+    const deskPositions = [
+      { x: -14, z: -2.5 },
+      { x: -9.5, z: -2.5 },
+      { x: -5, z: -2.5 },
+      { x: -14, z: 2.2 },
+      { x: -9.5, z: 2.2 },
+      { x: -5, z: 2.2 },
+      { x: 0.5, z: 1.5 }
+    ];
+
+    const deskChairTargets = [];
+
+    deskPositions.forEach((pos, idx) => {
+      const emp = EMPLOYEES[idx];
+      // Desk Tabletop
+      createBox(2.8, 0.14, 1.4, 0x475569, pos.x, 1.0, pos.z);
+      // Desk Legs
+      createBox(0.12, 1.0, 1.2, 0x1e293b, pos.x - 1.25, 0.5, pos.z);
+      createBox(0.12, 1.0, 1.2, 0x1e293b, pos.x + 1.25, 0.5, pos.z);
+
+      // Dual Monitors
+      createBox(0.95, 0.58, 0.08, 0x0f172a, pos.x - 0.45, 1.48, pos.z - 0.35);
+      createBox(0.95, 0.58, 0.08, 0x0f172a, pos.x + 0.52, 1.48, pos.z - 0.32);
+      // Glowing Monitor Screens colored by employee theme
+      const scrMat = new THREE.MeshBasicMaterial({ color: emp.hex });
+      const scr1 = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.48), scrMat);
+      scr1.position.set(pos.x - 0.45, 1.48, pos.z - 0.30);
+      scene.add(scr1);
+      const scr2 = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.48), scrMat);
+      scr2.position.set(pos.x + 0.52, 1.48, pos.z - 0.27);
+      scene.add(scr2);
+
+      // PC Tower & Keyboard
+      createBox(0.38, 0.72, 0.7, 0x0f172a, pos.x + 1.15, 0.36, pos.z - 0.2);
+      createBox(0.7, 0.05, 0.28, 0x94a3b8, pos.x, 1.09, pos.z + 0.15);
+
+      // Office Chair
+      createBox(0.75, 0.12, 0.75, 0x334155, pos.x, 0.58, pos.z + 0.85);
+      createBox(0.7, 0.75, 0.12, 0x334155, pos.x, 0.98, pos.z + 1.18);
+      createBox(0.12, 0.55, 0.12, 0x0f172a, pos.x, 0.28, pos.z + 0.85);
+
+      deskChairTargets.push({ x: pos.x, z: pos.z + 0.82, rotY: Math.PI });
+    });
+
+    // --- ZONE B: RUANG RAPAT (Meeting Room: Top Left x=-11, z=-9.5) ---
+    // Carpet
+    createBox(10, 0.04, 6.5, 0x1e1b4b, -10.5, 0.02, -9.5, false, true);
+    // Long Conference Table
+    createBox(5.6, 0.16, 2.2, 0x78350f, -10.5, 1.0, -9.5);
+    createBox(4.4, 0.95, 1.2, 0x451a03, -10.5, 0.48, -9.5);
+    // Presentation Screen on North Wall
+    createBox(4.2, 1.8, 0.15, 0x0f172a, -10.5, 1.7, -13.75);
+    const boardScreen = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.9, 1.55),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+    );
+    boardScreen.position.set(-10.5, 1.7, -13.66);
+    scene.add(boardScreen);
+
+    const meetingSpots = [
+      { x: -12.2, z: -7.8, rotY: Math.PI },
+      { x: -10.5, z: -7.8, rotY: Math.PI },
+      { x: -8.8, z: -7.8, rotY: Math.PI },
+      { x: -12.2, z: -11.2, rotY: 0 },
+      { x: -10.5, z: -11.2, rotY: 0 },
+      { x: -8.8, z: -11.2, rotY: 0 },
+      { x: -7.1, z: -9.5, rotY: -Math.PI / 2 }
+    ];
+    meetingSpots.forEach(s => {
+      createBox(0.65, 0.1, 0.65, 0x4f46e5, s.x, 0.55, s.z);
+    });
+
+    // --- ZONE C: RUANG NGOPI (Coffee Lounge: Top Right Indoor x=3.5, z=-9.5) ---
+    // Warm Wooden Floor
+    createBox(11.5, 0.04, 8.5, 0x422006, 3.5, 0.02, -9.2, false, true);
+    // Coffee Bar Counter
+    createBox(4.5, 1.15, 1.1, 0x92400e, 2.5, 0.58, -12.5);
+    // Espresso Machine
+    createBox(0.9, 0.75, 0.65, 0xe2e8f0, 1.5, 1.52, -12.5);
+    createBox(0.3, 0.4, 0.3, 0xef4444, 2.6, 1.35, -12.5);
+    // Cozy Sofa & Coffee Table
+    createBox(3.4, 0.55, 1.1, 0xb45309, 4.5, 0.3, -7.2);
+    createBox(3.4, 0.85, 0.3, 0x92400e, 4.5, 0.65, -6.8);
+    createBox(1.8, 0.45, 0.9, 0xd97706, 4.5, 0.25, -8.8);
+
+    const coffeeSpots = [
+      { x: 1.5, z: -11.2, rotY: Math.PI },
+      { x: 3.2, z: -11.2, rotY: Math.PI },
+      { x: 3.6, z: -7.5, rotY: Math.PI },
+      { x: 5.2, z: -7.5, rotY: Math.PI },
+      { x: 6.5, z: -9.0, rotY: -Math.PI / 2 },
+      { x: 2.2, z: -9.0, rotY: Math.PI / 2 },
+      { x: 4.5, z: -10.2, rotY: 0 }
+    ];
+
+    // --- ZONE D: RUANG TEMPAT TIDUR KARYAWAN (Rest Area: Bottom Left x=-12.5, z=10) ---
+    createBox(10.5, 0.04, 7.2, 0x1e1b4b, -12.5, 0.02, 10, false, true);
+    const bedCoords = [
+      { x: -15.5, z: 8.2 },
+      { x: -15.5, z: 11.6 },
+      { x: -10.2, z: 8.2 },
+      { x: -10.2, z: 11.6 }
+    ];
+    bedCoords.forEach((b, i) => {
+      // Bed Frame
+      createBox(3.2, 0.45, 1.65, 0x475569, b.x, 0.25, b.z);
+      // Mattress
+      createBox(3.0, 0.25, 1.5, 0xe2e8f0, b.x, 0.56, b.z);
+      // Blanket
+      createBox(2.0, 0.28, 1.52, i % 2 === 0 ? 0x6366f1 : 0x0ea5e9, b.x + 0.45, 0.58, b.z);
+      // Pillow
+      createBox(0.6, 0.18, 1.1, 0xffffff, b.x - 1.1, 0.72, b.z);
+    });
+
+    const sleepSpots = [
+      { x: -15.2, z: 8.2, rotY: Math.PI / 2, lying: true },
+      { x: -15.2, z: 11.6, rotY: Math.PI / 2, lying: true },
+      { x: -9.9, z: 8.2, rotY: Math.PI / 2, lying: true },
+      { x: -9.9, z: 11.6, rotY: Math.PI / 2, lying: true },
+      { x: -12.8, z: 9.8, rotY: 0, lying: false },
+      { x: -12.8, z: 11.5, rotY: Math.PI, lying: false },
+      { x: -8.0, z: 10.0, rotY: -Math.PI / 2, lying: false }
+    ];
+
+    // --- ZONE E: TAMAN KANTOR (Garden: Right Side x=16, z=-12..12) ---
+    function createTree(x, z, scale = 1) {
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.25 * scale, 0.35 * scale, 2.0 * scale, 8),
+        new THREE.MeshStandardMaterial({ color: 0x78350f })
+      );
+      trunk.position.set(x, 1.0 * scale, z);
+      trunk.castShadow = true;
+      scene.add(trunk);
+
+      const foliage1 = new THREE.Mesh(
+        new THREE.ConeGeometry(1.5 * scale, 2.4 * scale, 8),
+        new THREE.MeshStandardMaterial({ color: 0x22c55e })
+      );
+      foliage1.position.set(x, 2.6 * scale, z);
+      foliage1.castShadow = true;
+      scene.add(foliage1);
+
+      const foliage2 = new THREE.Mesh(
+        new THREE.ConeGeometry(1.1 * scale, 2.0 * scale, 8),
+        new THREE.MeshStandardMaterial({ color: 0x4ade80 })
+      );
+      foliage2.position.set(x, 3.8 * scale, z);
+      foliage2.castShadow = true;
+      scene.add(foliage2);
+    }
+
+    createTree(18.5, -10, 1.1);
+    createTree(19.2, -2, 1.25);
+    createTree(18.2, 6, 1.0);
+    createTree(12.2, -11, 0.95);
+    createTree(12.2, 10.5, 1.05);
+
+    // Garden Benches & Fountain
+    createBox(0.9, 0.5, 2.4, 0xd97706, 15.8, 0.3, -5);
+    createBox(0.9, 0.5, 2.4, 0xd97706, 15.8, 0.3, 5);
+    // Decorative Fountain
+    const fountainBase = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.6, 1.8, 0.5, 16),
+      new THREE.MeshStandardMaterial({ color: 0x64748b })
+    );
+    fountainBase.position.set(16.2, 0.25, 0);
+    scene.add(fountainBase);
+    const waterPool = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.4, 1.4, 0.55, 16),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+    );
+    waterPool.position.set(16.2, 0.26, 0);
+    scene.add(waterPool);
+
+    const gardenSpots = [
+      { x: 14.5, z: -5, rotY: Math.PI / 2 },
+      { x: 14.5, z: 5, rotY: Math.PI / 2 },
+      { x: 13.8, z: 0, rotY: Math.PI / 2 },
+      { x: 16.5, z: -8, rotY: 0 },
+      { x: 16.5, z: 8, rotY: Math.PI },
+      { x: 13.5, z: -3, rotY: 0 },
+      { x: 13.5, z: 3, rotY: Math.PI }
+    ];
+
+    // ==========================================
+    // 4. CREATE 7 STYLIZED 3D AI EMPLOYEE AVATARS
+    // ==========================================
+    const employeeMeshes = {};
+    const clickableMeshes = [];
+    const labelsLayer = document.getElementById('labels-layer');
+
+    EMPLOYEES.forEach((emp, idx) => {
+      const group = new THREE.Group();
+      const startPos = deskChairTargets[idx];
+      group.position.set(startPos.x, 0, startPos.z);
+
+      // Torso (Suit/Hoodie colored per AI role)
+      const torso = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.32, 0.38, 0.95, 12),
+        new THREE.MeshStandardMaterial({ color: emp.hex, roughness: 0.4 })
+      );
+      torso.position.y = 0.95;
+      torso.castShadow = true;
+      group.add(torso);
+
+      // Head
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.32, 16, 16),
+        new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.5 })
+      );
+      head.position.y = 1.68;
+      head.castShadow = true;
+      group.add(head);
+
+      // AI Visor / Glasses (Futuristic AI touch)
+      const visor = new THREE.Mesh(
+        new THREE.BoxGeometry(0.46, 0.12, 0.25),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+      );
+      visor.position.set(0, 1.70, 0.22);
+      group.add(visor);
+
+      // Left & Right Arms (Animated for typing, waving, walking)
+      const armGeo = new THREE.BoxGeometry(0.16, 0.65, 0.16);
+      const armMat = new THREE.MeshStandardMaterial({ color: emp.hex });
+      const leftArm = new THREE.Mesh(armGeo, armMat);
+      leftArm.position.set(-0.42, 1.0, 0.15);
+      group.add(leftArm);
+
+      const rightArm = new THREE.Mesh(armGeo, armMat);
+      rightArm.position.set(0.42, 1.0, 0.15);
+      group.add(rightArm);
+
+      // Selection Ring on Floor
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.55, 0.72, 24),
+        new THREE.MeshBasicMaterial({ color: emp.hex, side: THREE.DoubleSide })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.04;
+      group.add(ring);
+
+      // Invisible larger hitbox for easy clicking/tapping
+      const hitbox = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.65, 0.65, 2.2, 8),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      hitbox.position.y = 1.1;
+      hitbox.userData = { employeeId: emp.id };
+      group.add(hitbox);
+      clickableMeshes.push(hitbox);
+
+      scene.add(group);
+
+      // Create Floating HTML Nameplate + Speech Bubble
+      const tagEl = document.createElement('div');
+      tagEl.className = 'emp-tag flex flex-col items-center';
+      tagEl.onclick = () => selectEmployee(emp.id, true);
+      tagEl.innerHTML = `
+        <div id="bubble-${emp.id}" class="speech-bubble mb-1 px-2.5 py-1 rounded-xl bg-slate-900/90 border border-slate-600/80 text-[11px] font-medium text-white shadow-lg whitespace-nowrap max-w-[200px] truncate">
+          ${emp.statusText}
+        </div>
+        <div class="px-2.5 py-0.5 rounded-full text-[11px] font-bold text-white shadow-md flex items-center gap-1 border border-white/20" style="background:${emp.color}">
+          <span>${emp.emoji}</span>
+          <span>${emp.name}</span>
+          <span class="opacity-80 font-normal text-[9px]">(${emp.shortRole})</span>
+        </div>
+      `;
+      labelsLayer.appendChild(tagEl);
+
+      employeeMeshes[emp.id] = {
+        group,
+        torso,
+        head,
+        leftArm,
+        rightArm,
+        ring,
+        tagEl,
+        targetPos: new THREE.Vector3(startPos.x, 0, startPos.z),
+        targetRotY: startPos.rotY,
+        lying: false
+      };
+    });
+
+    // Apply initial employee activities
+    EMPLOYEES.forEach(emp => updateEmployeeTarget(emp));
+
+    function updateEmployeeTarget(emp) {
+      const idx = emp.deskIndex;
+      const meshData = employeeMeshes[emp.id];
+      let spot = deskChairTargets[idx];
+      meshData.lying = false;
+
+      if (emp.activity === 'work') {
+        spot = deskChairTargets[idx];
+      } else if (emp.activity === 'meeting') {
+        spot = meetingSpots[idx];
+      } else if (emp.activity === 'coffee') {
+        spot = coffeeSpots[idx];
+      } else if (emp.activity === 'sleep') {
+        spot = sleepSpots[idx];
+        meshData.lying = !!spot.lying;
+      } else if (emp.activity === 'garden') {
+        spot = gardenSpots[idx];
+      }
+
+      meshData.targetPos.set(spot.x, 0, spot.z);
+      meshData.targetRotY = spot.rotY;
+
+      // Update default speech bubble if customBubble is empty
+      if (!emp.customBubble) {
+        const defaultTexts = {
+          work: getDefaultWorkText(emp.id),
+          meeting: `📋 Diskusi strategi konten bareng tim`,
+          coffee: `☕ Ngopi santai biar ide ngalir!`,
+          sleep: `💤 Istirahat sejenak recharge CPU...`,
+          garden: `🌳 Cari inspirasi segar di taman`
+        };
+        emp.statusText = defaultTexts[emp.activity];
+      } else {
+        emp.statusText = emp.customBubble;
+      }
+
+      const bubbleEl = document.getElementById(`bubble-${emp.id}`);
+      if (bubbleEl) bubbleEl.textContent = emp.statusText;
+    }
+
+    function getDefaultWorkText(id) {
+      switch (id) {
+        case 'ilham': return '🎬 Lagi ngedit transisi Reel viral...';
+        case 'saad': return '👔 Cek KPI & koordinasi 7 AI...';
+        case 'ilyas': return '✨ Bikin animasi 30 detik (60fps)...';
+        case 'hamza': return '📊 Riset tren & audio FYP hari ini...';
+        case 'abdaziz': return '✍️ Nulis materi & hook konten baru...';
+        case 'abbas': return '🚀 Auto-upload 5 Reel/hari ke sosmed!';
+        case 'zubair': return '💬 Balas chat & DM customer ramah...';
+        default: return '💻 Sedang bekerja...';
+      }
+    }
+
+    // ==========================================
+    // 5. CAMERA ORBIT, ZOOM & RAYCASTING CONTROLS
+    // ==========================================
+    let camTarget = new THREE.Vector3(-1, 0, 0);
+    let camSpherical = { radius: 34, theta: 0.25, phi: 0.92 };
+    let isDragging = false;
+    let prevMouse = { x: 0, y: 0 };
+    let dragDistance = 0;
+
+    function updateCameraPosition() {
+      const x = camTarget.x + camSpherical.radius * Math.sin(camSpherical.phi) * Math.sin(camSpherical.theta);
+      const y = camTarget.y + camSpherical.radius * Math.cos(camSpherical.phi);
+      const z = camTarget.z + camSpherical.radius * Math.sin(camSpherical.phi) * Math.cos(camSpherical.theta);
+      camera.position.set(x, Math.max(3, y), z);
+      camera.lookAt(camTarget);
+    }
+    updateCameraPosition();
+
+    // Pointer Events (Mouse + Touch)
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      isDragging = true;
+      dragDistance = 0;
+      prevMouse = { x: e.clientX, y: e.clientY };
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - prevMouse.x;
+      const dy = e.clientY - prevMouse.y;
+      dragDistance += Math.abs(dx) + Math.abs(dy);
+      camSpherical.theta -= dx * 0.007;
+      camSpherical.phi = Math.max(0.32, Math.min(1.38, camSpherical.phi - dy * 0.007));
+      prevMouse = { x: e.clientX, y: e.clientY };
+      updateCameraPosition();
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (isDragging && dragDistance < 6) {
+        handleCanvasClick(e);
+      }
+      isDragging = false;
+    });
+
+    renderer.domElement.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      camSpherical.radius = Math.max(10, Math.min(52, camSpherical.radius + e.deltaY * 0.02));
+      updateCameraPosition();
+    }, { passive: false });
+
+    const raycaster = new THREE.Raycaster();
+    const mouseVec = new THREE.Vector2();
+
+    function handleCanvasClick(e) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouseVec.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouseVec.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouseVec, camera);
+      const hits = raycaster.intersectObjects(clickableMeshes);
+      if (hits.length > 0) {
+        const empId = hits[0].object.userData.employeeId;
+        selectEmployee(empId, true);
+      }
+    }
+
+    function focusCameraZone(zone) {
+      const zones = {
+        overview: { target: [-1, 0, 0], radius: 34, theta: 0.25, phi: 0.92 },
+        workstations: { target: [-8, 0, 0], radius: 17, theta: 0.1, phi: 0.88 },
+        meeting: { target: [-10.5, 0, -9.5], radius: 14, theta: 0.0, phi: 0.85 },
+        coffee: { target: [3.5, 0, -9.2], radius: 14, theta: -0.2, phi: 0.85 },
+        bedroom: { target: [-12.5, 0, 10], radius: 15, theta: 0.3, phi: 0.85 },
+        garden: { target: [16, 0, 0], radius: 18, theta: -0.5, phi: 0.88 }
+      };
+      const z = zones[zone] || zones.overview;
+      camTarget.set(...z.target);
+      camSpherical.radius = z.radius;
+      camSpherical.theta = z.theta;
+      camSpherical.phi = z.phi;
+      updateCameraPosition();
+    }
+
+    // ==========================================
+    // 6. UI RENDERING & INTERACTIONS
+    // ==========================================
+    function renderEmployeeDock() {
+      const dock = document.getElementById('employee-dock');
+      dock.innerHTML = EMPLOYEES.map(emp => {
+        const isSelected = emp.id === selectedEmployeeId;
+        return `
+          <button onclick="selectEmployee('${emp.id}', true)"
+            class="flex items-center gap-2 px-3 py-2 rounded-xl transition shrink-0 border ${isSelected ? 'bg-indigo-600/40 border-indigo-400 shadow-lg' : 'bg-slate-800/70 border-slate-700/70 hover:bg-slate-700/70'}">
+            <span class="w-7 h-7 rounded-lg flex items-center justify-center text-sm shadow" style="background:${emp.color}">${emp.emoji}</span>
+            <div class="text-left">
+              <div class="text-xs font-bold text-white leading-none">${emp.name}</div>
+              <div class="text-[10px] text-slate-300 mt-0.5">${emp.shortRole}</div>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectEmployee(empId, openDrawer = true) {
+      selectedEmployeeId = empId;
+      const emp = EMPLOYEES.find(e => e.id === empId);
+      if (!emp) return;
+
+      renderEmployeeDock();
+
+      // Focus camera gently on employee
+      const meshPos = employeeMeshes[empId].group.position;
+      camTarget.set(meshPos.x, 1, meshPos.z);
+      camSpherical.radius = 15;
+      updateCameraPosition();
+
+      // Populate Right Drawer
+      document.getElementById('drawer-avatar').style.background = emp.color;
+      document.getElementById('drawer-avatar').textContent = emp.emoji;
+      document.getElementById('drawer-name').textContent = emp.name;
+      document.getElementById('drawer-badge').textContent = emp.role;
+      document.getElementById('drawer-status-text').textContent = emp.statusText;
+      document.getElementById('custom-bubble-input').value = emp.customBubble || '';
+      document.getElementById('brain-tone').value = emp.tone;
+      document.getElementById('brain-prompt').value = emp.prompt;
+      document.getElementById('brain-temp').value = emp.temp;
+      document.getElementById('brain-temp-val').textContent = emp.temp;
+
+      // Highlight active activity button
+      document.querySelectorAll('.act-btn').forEach(btn => {
+        if (btn.dataset.act === emp.activity) {
+          btn.classList.add('bg-indigo-600', 'border-indigo-400', 'text-white');
+          btn.classList.remove('bg-slate-800', 'border-slate-700');
+        } else {
+          btn.classList.remove('bg-indigo-600', 'border-indigo-400', 'text-white');
+          btn.classList.add('bg-slate-800', 'border-slate-700');
+        }
+      });
+
+      renderEmployeePdfs(emp);
+
+      if (openDrawer) {
+        document.getElementById('employee-drawer').classList.remove('translate-x-[120%]');
+      }
+    }
+
+    function closeEmployeeDrawer() {
+      document.getElementById('employee-drawer').classList.add('translate-x-[120%]');
+    }
+
+    function setEmployeeActivity(activity) {
+      const emp = EMPLOYEES.find(e => e.id === selectedEmployeeId);
+      if (!emp) return;
+      emp.activity = activity;
+      emp.customBubble = '';
+      updateEmployeeTarget(emp);
+      selectEmployee(emp.id, false);
+      addLog(emp.name, `Pindah aktivitas ke mode: ${activity.toUpperCase()}.`);
+      showToast(`${emp.emoji} ${emp.name} sekarang: ${emp.statusText}`);
+    }
+
+    function applyCustomBubble() {
+      const emp = EMPLOYEES.find(e => e.id === selectedEmployeeId);
+      if (!emp) return;
+      const val = document.getElementById('custom-bubble-input').value.trim();
+      emp.customBubble = val;
+      updateEmployeeTarget(emp);
+      document.getElementById('drawer-status-text').textContent = emp.statusText;
+      showToast(`💬 Status ${emp.name} diperbarui!`);
+    }
+
+    function saveEmployeeBrain() {
+      const emp = EMPLOYEES.find(e => e.id === selectedEmployeeId);
+      if (!emp) return;
+      emp.tone = document.getElementById('brain-tone').value;
+      emp.prompt = document.getElementById('brain-prompt').value;
+      emp.temp = parseFloat(document.getElementById('brain-temp').value);
+      addLog(emp.name, `Otak AI diperbarui (${emp.tone}).`);
+      showToast(`🧠 Otak AI ${emp.name} berhasil disimpan!`);
+    }
+
+    function handlePdfUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const emp = EMPLOYEES.find(e => e.id === selectedEmployeeId);
+      if (!emp) return;
+
+      const sizeKB = Math.max(12, Math.round(file.size / 1024));
+      const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`;
+
+      emp.pdfs.push({
+        name: file.name,
+        size: sizeLabel,
+        summary: `Modul pengetahuan PDF dipelajari oleh ${emp.name} (${emp.shortRole}).`
+      });
+
+      event.target.value = '';
+      renderEmployeePdfs(emp);
+      addLog(emp.name, `Mempelajari skill PDF baru: "${file.name}".`);
+      showToast(`📄 Skill PDF "${file.name}" ditambahkan ke ${emp.name}!`);
+    }
+
+    function removePdfSkill(index) {
+      const emp = EMPLOYEES.find(e => e.id === selectedEmployeeId);
+      if (!emp) return;
+      const removed = emp.pdfs.splice(index, 1);
+      renderEmployeePdfs(emp);
+      if (removed[0]) showToast(`🗑️ Skill "${removed[0].name}" dihapus.`);
+    }
+
+    function renderEmployeePdfs(emp) {
+      document.getElementById('pdf-count-badge').textContent = `${emp.pdfs.length} PDF`;
+      const list = document.getElementById('pdf-skill-list');
+      if (emp.pdfs.length === 0) {
+        list.innerHTML = `<div class="text-[11px] text-slate-500 italic text-center py-2">Belum ada file PDF skill ditambahkan.</div>`;
+        return;
+      }
+      list.innerHTML = emp.pdfs.map((pdf, i) => `
+        <div class="flex items-center justify-between gap-2 bg-slate-900/80 border border-slate-700/80 rounded-xl px-3 py-2">
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-emerald-300 truncate">📕 ${pdf.name}</div>
+            <div class="text-[10px] text-slate-400 truncate">${pdf.size} • ${pdf.summary}</div>
+          </div>
+          <button onclick="removePdfSkill(${i})" class="text-xs text-rose-400 hover:text-rose-300 px-1.5 py-1 rounded-lg bg-rose-500/10">✕</button>
+        </div>
+      `).join('');
+    }
+
+    // ==========================================
+    // 7. SOCIAL MEDIA CONNECTIONS & 5 REELS/DAY ENGINE
+    // ==========================================
+    function renderSocialAccounts() {
+      const container = document.getElementById('social-accounts-list');
+      container.innerHTML = SOCIAL_ACCOUNTS.map(acc => `
+        <div class="glass-card rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br ${acc.color} flex items-center justify-center text-2xl shadow-lg">
+              ${acc.icon}
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-bold text-white">${acc.name}</h3>
+                ${acc.connected
+                  ? `<span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Terhubung</span>`
+                  : `<span class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-slate-700 text-slate-300">Belum Login</span>`
+                }
+              </div>
+              <div class="mt-1 flex items-center gap-2">
+                <input id="handle-${acc.id}" type="text" value="${acc.handle}"
+                  class="bg-slate-900/90 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 w-44 focus:outline-none focus:border-pink-500" />
+                <span class="text-[11px] text-slate-400">Target: <strong class="text-white">${acc.uploadedToday}/${acc.dailyTarget} Reel</strong></span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="toggleSocialLogin('${acc.id}')"
+              class="px-4 py-2 rounded-xl text-xs font-bold transition shadow ${acc.connected
+                ? 'bg-slate-800 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30'
+                : 'bg-gradient-to-r from-pink-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white'}">
+              ${acc.connected ? 'Putuskan Akun' : '🔑 Login & Hubungkan'}
+            </button>
+          </div>
+        </div>
+      `).join('');
+      updateHudBadges();
+    }
+
+    function toggleSocialLogin(id) {
+      const acc = SOCIAL_ACCOUNTS.find(a => a.id === id);
+      if (!acc) return;
+      const inputEl = document.getElementById(`handle-${id}`);
+      if (inputEl && inputEl.value.trim()) acc.handle = inputEl.value.trim();
+
+      acc.connected = !acc.connected;
+      if (acc.connected && acc.uploadedToday === 0) {
+        acc.uploadedToday = 1;
+        addLog('Abbas', `Login berhasil ke ${acc.name} (${acc.handle}) & menjadwalkan 5 Reel/hari.`);
+        showToast(`✅ Berhasil terhubung ke ${acc.name}!`);
+      } else if (!acc.connected) {
+        showToast(`🔌 Koneksi ${acc.name} diputus.`);
+      }
+      renderSocialAccounts();
+      renderDashboard();
+    }
+
+    function updateHudBadges() {
+      const connected = SOCIAL_ACCOUNTS.filter(a => a.connected);
+      const totalUploaded = connected.reduce((sum, a) => sum + a.uploadedToday, 0);
+      const totalTarget = connected.reduce((sum, a) => sum + a.dailyTarget, 0);
+
+      document.getElementById('hud-social-count').textContent = `${connected.length} Aktif`;
+      document.getElementById('hud-upload-badge').textContent = `${totalUploaded}/${totalTarget || 5} Reel`;
+    }
+
+    // Simulate full 7-AI pipeline producing & uploading 1 Reel to all connected platforms
+    function triggerUploadCycle(manual = false) {
+      const connected = SOCIAL_ACCOUNTS.filter(a => a.connected);
+      if (connected.length === 0) {
+        showToast('⚠️ Hubungkan minimal 1 akun sosial media terlebih dahulu!');
+        openModal('social-modal');
+        return;
+      }
+
+      // Pipeline steps reflected in 3D speech bubbles
+      const hamza = EMPLOYEES.find(e => e.id === 'hamza');
+      const abd = EMPLOYEES.find(e => e.id === 'abdaziz');
+      const ilyas = EMPLOYEES.find(e => e.id === 'ilyas');
+      const ilham = EMPLOYEES.find(e => e.id === 'ilham');
+      const abbas = EMPLOYEES.find(e => e.id === 'abbas');
+      const zubair = EMPLOYEES.find(e => e.id === 'zubair');
+
+      hamza.tasksCompleted++;
+      abd.tasksCompleted++;
+      ilyas.tasksCompleted++;
+      ilham.tasksCompleted++;
+      animCounter++;
+      dmCounter += Math.floor(Math.random() * 5) + 2;
+      zubair.tasksCompleted = dmCounter;
+
+      let uploadedCount = 0;
+      connected.forEach(acc => {
+        if (acc.uploadedToday < acc.dailyTarget) {
+          acc.uploadedToday++;
+          abbas.tasksCompleted++;
+          uploadedCount++;
+        }
+      });
+
+      // Temporary visual celebration bubbles in 3D
+      flashEmployeeBubble('abdaziz', '✍️ Skrip konten siap!');
+      setTimeout(() => flashEmployeeBubble('ilyas', '✨ Animasi 30 detik selesai!'), 600);
+      setTimeout(() => flashEmployeeBubble('ilham', '🎬 Final render HD beres!'), 1200);
+      setTimeout(() => flashEmployeeBubble('abbas', '🚀 Reel berhasil diupload!'), 1800);
+
+      if (uploadedCount > 0) {
+        addLog('Abbas', `Upload Reel baru ke ${connected.map(c => c.name).join(', ')}!`);
+        if (manual) showToast(`🚀 Siklus AI Selesai! Reel baru diupload ke ${connected.length} akun.`);
+      } else {
+        addLog('Saad', `Target harian 5/5 Reel di semua akun terhubung sudah tercapai!`);
+        if (manual) showToast(`🎉 Mantap! Target 5/5 Reel hari ini di semua akun sudah penuh!`);
+      }
+
+      updateHudBadges();
+      renderDashboard();
+    }
+
+    function flashEmployeeBubble(empId, tempText) {
+      const emp = EMPLOYEES.find(e => e.id === empId);
+      if (!emp) return;
+      const bubbleEl = document.getElementById(`bubble-${empId}`);
+      if (bubbleEl) {
+        bubbleEl.textContent = tempText;
+        setTimeout(() => {
+          bubbleEl.textContent = emp.statusText;
+        }, 4000);
+      }
+    }
+
+    function renderDashboard() {
+      const connected = SOCIAL_ACCOUNTS.filter(a => a.connected);
+      const totalUp = connected.reduce((s, a) => s + a.uploadedToday, 0);
+      const totalTar = connected.reduce((s, a) => s + a.dailyTarget, 0);
+
+      document.getElementById('kpi-reels').textContent = `${totalUp} / ${totalTar}`;
+      document.getElementById('kpi-anim').textContent = `${animCounter} Video`;
+      document.getElementById('kpi-dm').textContent = `${dmCounter} Dibalas`;
+
+      // Progress bars per social platform
+      const progContainer = document.getElementById('dashboard-social-progress');
+      progContainer.innerHTML = SOCIAL_ACCOUNTS.map(acc => {
+        const pct = Math.min(100, Math.round((acc.uploadedToday / acc.dailyTarget) * 100));
+        return `
+          <div class="bg-slate-900/70 border border-slate-700/70 rounded-xl p-3">
+            <div class="flex items-center justify-between text-xs mb-1.5">
+              <span class="font-bold text-white flex items-center gap-1.5">${acc.icon} ${acc.name} <span class="text-slate-400 font-normal">(${acc.handle})</span></span>
+              <span class="font-bold ${acc.connected ? 'text-emerald-400' : 'text-slate-500'}">
+                ${acc.connected ? `${acc.uploadedToday} / 5 Reel` : 'Nonaktif'}
+              </span>
+            </div>
+            <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r ${acc.color} transition-all duration-500" style="width: ${acc.connected ? pct : 0}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // 7 Employees Status List
+      const empList = document.getElementById('dashboard-employee-list');
+      empList.innerHTML = EMPLOYEES.map(emp => `
+        <div onclick="closeModal('dashboard-modal'); selectEmployee('${emp.id}', true);"
+          class="flex items-center justify-between gap-2 bg-slate-900/60 hover:bg-slate-800/80 border border-slate-700/60 rounded-xl px-3 py-2 cursor-pointer transition">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0" style="background:${emp.color}">${emp.emoji}</span>
+            <div class="min-w-0">
+              <div class="text-xs font-bold text-white truncate">${emp.name} <span class="text-slate-400 font-normal">— ${emp.role}</span></div>
+              <div class="text-[11px] text-slate-300 truncate">${emp.statusText}</div>
+            </div>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="text-xs font-bold text-indigo-300">${emp.tasksCompleted} Output</div>
+            <div class="text-[10px] text-emerald-400">${emp.pdfs.length} Skill PDF</div>
+          </div>
+        </div>
+      `).join('');
+
+      // Activity Logs
+      const logFeed = document.getElementById('activity-log-feed');
+      logFeed.innerHTML = ACTIVITY_LOGS.map(item => `
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-2.5">
+          <div class="flex items-center justify-between text-[10px] text-slate-400 mb-0.5">
+            <span class="font-bold text-indigo-300">${item.actor}</span>
+            <span>${item.time}</span>
+          </div>
+          <p class="text-slate-200 leading-snug">${item.text}</p>
+        </div>
+      `).join('');
+    }
+
+    function addLog(actor, text) {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      ACTIVITY_LOGS.unshift({ time: timeStr, actor, text });
+      if (ACTIVITY_LOGS.length > 25) ACTIVITY_LOGS.pop();
+    }
+
+    // ==========================================
+    // 8. REAL-TIME CLOCK & AUTONOMOUS AI LOOP
+    // ==========================================
+    function updateRealTimeClock() {
+      const now = new Date();
+      const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const dateFormatted = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+      document.getElementById('realtime-clock').textContent = `${timeFormatted} WIB`;
+      document.getElementById('realtime-date').textContent = dateFormatted;
+    }
+    setInterval(updateRealTimeClock, 1000);
+    updateRealTimeClock();
+
+    function toggleAutoMode() {
+      autoMode = !autoMode;
+      const btn = document.getElementById('auto-mode-btn');
+      const dot = document.getElementById('auto-mode-dot');
+      if (autoMode) {
+        btn.classList.replace('bg-slate-600', 'bg-emerald-500');
+        dot.classList.add('translate-x-5');
+        showToast('🤖 Mode Otomatis AI Aktif');
+      } else {
+        btn.classList.replace('bg-emerald-500', 'bg-slate-600');
+        dot.classList.remove('translate-x-5');
+        showToast('⏸️ Mode Otomatis Dijeda (Kontrol Manual)');
+      }
+    }
+
+    // Autonomous office behavior every 9 seconds
+    setInterval(() => {
+      if (!autoMode) return;
+      const randomEmp = EMPLOYEES[Math.floor(Math.random() * EMPLOYEES.length)];
+      const states = ['work', 'work', 'work', 'meeting', 'coffee', 'garden', 'sleep'];
+      const nextAct = states[Math.floor(Math.random() * states.length)];
+      randomEmp.activity = nextAct;
+      randomEmp.customBubble = '';
+      updateEmployeeTarget(randomEmp);
+      if (selectedEmployeeId === randomEmp.id) {
+        selectEmployee(randomEmp.id, false);
+      }
+    }, 9000);
+
+    // ==========================================
+    // 9. MODALS & TOAST HELPERS
+    // ==========================================
+    function openModal(id) {
+      if (id === 'dashboard-modal') renderDashboard();
+      if (id === 'social-modal') renderSocialAccounts();
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      el.classList.add('hidden');
+      el.classList.remove('flex');
+    }
+
+    function showToast(msg) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'glass px-4 py-2.5 rounded-2xl text-xs font-semibold text-white border border-indigo-400/40 shadow-xl transition-opacity duration-300';
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 3200);
+    }
+
+    // ==========================================
+    // 10. 3D ANIMATION LOOP & HTML LABEL PROJECTION
+    // ==========================================
+    const clock = new THREE.Clock();
+    const tempVec = new THREE.Vector3();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const elapsed = clock.getElapsedTime();
+
+      EMPLOYEES.forEach((emp, i) => {
+        const m = employeeMeshes[emp.id];
+        const dist = m.group.position.distanceTo(m.targetPos);
+
+        // Smooth walking movement toward target zone
+        if (dist > 0.08) {
+          m.group.position.lerp(m.targetPos, 0.045);
+          const angle = Math.atan2(m.targetPos.x - m.group.position.x, m.targetPos.z - m.group.position.z);
+          m.group.rotation.y = angle;
+          // Walking bob & arm swing
+          m.group.position.y = Math.abs(Math.sin(elapsed * 10 + i)) * 0.12;
+          m.leftArm.rotation.x = Math.sin(elapsed * 10 + i) * 0.6;
+          m.rightArm.rotation.x = -Math.sin(elapsed * 10 + i) * 0.6;
+          m.torso.rotation.x = 0;
+        } else {
+          m.group.position.y = 0;
+          m.group.rotation.y += (m.targetRotY - m.group.rotation.y) * 0.1;
+
+          // Activity-specific 3D animations
+          if (emp.activity === 'work') {
+            // Fast typing / editing arm motion
+            m.leftArm.rotation.x = -0.9 + Math.sin(elapsed * 18 + i) * 0.18;
+            m.rightArm.rotation.x = -0.9 + Math.cos(elapsed * 18 + i) * 0.18;
+            m.head.rotation.y = Math.sin(elapsed * 2 + i) * 0.15;
+            m.torso.rotation.x = 0;
+          } else if (emp.activity === 'meeting') {
+            // Explaining / gesturing in meeting
+            m.rightArm.rotation.x = -0.7 + Math.sin(elapsed * 5 + i) * 0.4;
+            m.leftArm.rotation.x = -0.2;
+            m.head.rotation.y = Math.sin(elapsed * 1.8 + i) * 0.25;
+            m.torso.rotation.x = 0;
+          } else if (emp.activity === 'coffee') {
+            // Sipping coffee motion
+            m.rightArm.rotation.x = -1.2 + Math.sin(elapsed * 2.5 + i) * 0.35;
+            m.leftArm.rotation.x = 0;
+            m.torso.rotation.x = 0;
+          } else if (emp.activity === 'sleep' && m.lying) {
+            // Lying comfortably on bed
+            m.group.position.y = 0.85;
+            m.torso.rotation.x = -Math.PI / 2;
+            m.head.position.set(0, 1.0, -0.65);
+            m.leftArm.rotation.x = 0;
+            m.rightArm.rotation.x = 0;
+          } else {
+            // Relaxed breathing / walking in garden
+            m.leftArm.rotation.x = Math.sin(elapsed * 2 + i) * 0.1;
+            m.rightArm.rotation.x = -Math.sin(elapsed * 2 + i) * 0.1;
+            m.torso.rotation.x = 0;
+          }
+        }
+
+        // Reset head pos when not lying down
+        if (!(emp.activity === 'sleep' && m.lying && dist <= 0.08)) {
+          m.head.position.set(0, 1.68, 0);
+        }
+
+        // Highlight ring pulse if selected
+        if (emp.id === selectedEmployeeId) {
+          m.ring.scale.setScalar(1.15 + Math.sin(elapsed * 5) * 0.12);
+        } else {
+          m.ring.scale.setScalar(1.0);
+        }
+
+        // Project 3D position above head to 2D screen coordinates for floating bubble & nameplate
+        tempVec.set(m.group.position.x, m.group.position.y + 2.35, m.group.position.z);
+        tempVec.project(camera);
+
+        if (tempVec.z < 1) {
+          const x = (tempVec.x * 0.5 + 0.5) * window.innerWidth;
+          const y = (-tempVec.y * 0.5 + 0.5) * window.innerHeight;
+          m.tagEl.style.left = `${x}px`;
+          m.tagEl.style.top = `${y}px`;
+          m.tagEl.style.opacity = '1';
+        } else {
+          m.tagEl.style.opacity = '0';
+        }
+      });
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    window.onload = function () {
+      renderEmployeeDock();
+      updateHudBadges();
+      selectEmployee('ilham', false);
+      animate();
+    };
+  </script>
+</body>
+</html>
+```
